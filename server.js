@@ -27,14 +27,19 @@ app.use(
             if (!origin || ALLOWED_ORIGINS.includes(origin)) {
                 callback(null, true);
             } else {
-                callback(new Error(`CORS: origin '${origin}' not allowed`));
+                // Return false (not an Error) to avoid 500 — CORS will send a proper rejection
+                callback(null, false);
             }
         },
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization'],
         credentials: true,
+        optionsSuccessStatus: 204,
     })
 );
+
+// Handle OPTIONS preflight explicitly — must come before routes
+app.options('*', cors());
 app.use(express.json());
 
 // ── Routes ────────────────────────────────────────────────────────────────────
