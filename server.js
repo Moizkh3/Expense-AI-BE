@@ -15,7 +15,7 @@ import notificationRoutes from './routes/notificationRoutes.js';
 connectDB();
 initGemini();
 
-// Build allowed origins from CLIENT_URL env var (comma-separated) + always allow localhost dev
+// Build allowed origins list
 const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:4173',
@@ -26,16 +26,20 @@ const allowedOrigins = [
 
 const app = express();
 
-// Middleware
-app.use(cors({
-    origin: (origin, callback) => {
-        // Allow requests with no origin (mobile apps, curl, Postman)
-        if (!origin) return callback(null, true);
-        if (allowedOrigins.includes(origin)) return callback(null, true);
-        callback(new Error(`CORS: Origin ${origin} not allowed`));
-    },
-    credentials: true,
-}));
+// Handle CORS — must be before all routes
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (!origin || allowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+    // Respond to preflight immediately
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(204);
+    }
+    next();
+});
 app.use(express.json());
 
 // API Routes
