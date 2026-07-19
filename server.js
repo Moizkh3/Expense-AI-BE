@@ -11,38 +11,33 @@ import dashboardRoutes from './routes/dashboardRoutes.js';
 import insightRoutes from './routes/insightRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 
-// Initialize external services
-connectDB();
-initGemini();
-
-// Build allowed origins list
-const allowedOrigins = [
+// ── CORS ──────────────────────────────────────────────────────────────────────
+const ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://localhost:4173',
-    ...(process.env.CLIENT_URL
-        ? process.env.CLIENT_URL.split(',').map((u) => u.trim())
-        : []),
-];
+    process.env.CLIENT_URL,
+].filter(Boolean);
 
 const app = express();
 
-// Handle CORS — must be before all routes
-app.use((req, res, next) => {
-    const origin = req.headers.origin;
-    if (!origin || allowedOrigins.includes(origin)) {
-        res.setHeader('Access-Control-Allow-Origin', origin || '*');
-    }
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
-    // Respond to preflight immediately
-    if (req.method === 'OPTIONS') {
-        return res.sendStatus(204);
-    }
-    next();
-});
+app.use(
+    cors({
+        origin: (origin, callback) => {
+            // Allow server-to-server / Postman (no origin) or whitelisted origins
+            if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+                callback(null, true);
+            } else {
+                callback(new Error(`CORS: origin '${origin}' not allowed`));
+            }
+        },
+        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization'],
+        credentials: true,
+    })
+);
 app.use(express.json());
 
-// API Routes
+// ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/transactions', transactionRoutes);
@@ -51,9 +46,21 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/insights', insightRoutes);
 app.use('/api/notifications', notificationRoutes);
 
+// Root
+app.get('/', (req, res) => {
+    res.json({ message: 'ExpenseAI API is running 🚀' });
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// ── Global error handler ──────────────────────────────────────────────────────
+app.use((err, req, res, next) => {
+    console.error('❌ Server error:', err.message);
+    const status = err.status || err.statusCode || 500;
+    res.status(status).json({ error: err.message || 'Internal server error' });
 });
 
 // 404 handler
@@ -61,13 +68,26 @@ app.use((req, res) => {
     res.status(404).json({ message: `Route ${req.originalUrl} not found` });
 });
 
-// Global error handler
-app.use((err, req, res, next) => {
-    console.error('Unhandled error:', err);
-    res.status(500).json({ message: 'Internal server error' });
+// ── DB + AI init ──────────────────────────────────────────────────────────────
+// Called at module load — works for both local (nodemon) and Vercel serverless.
+let initialized = false;
+const init = async () => {
+    if (!initialized) {
+        await connectDB();
+        initGemini();
+        initialized = true;
+    }
+};
+init().catch((err) => {
+    console.error('❌ Startup error:', err.message);
 });
 
-const PORT = process.env.PORT || 8000;
-app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-});
+// ── Local dev server (Vercel ignores this) ────────────────────────────────────
+if (process.env.NODE_ENV !== 'production') {
+    const PORT = process.env.PORT || 8000;
+    app.listen(PORT, () => {
+        console.log(`🚀 Server running on http://localhost:${PORT}`);
+    });
+}
+
+export default app;
