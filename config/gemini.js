@@ -9,7 +9,7 @@ const initGemini = () => {
         return;
     }
     genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    model = genAI.getGenerativeModel({ model: 'gemini-3.0-flash' });
+    model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
     console.log('✅ Gemini AI initialized');
 };
 
