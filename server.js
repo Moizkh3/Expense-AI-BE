@@ -11,28 +11,48 @@ import dashboardRoutes from './routes/dashboardRoutes.js';
 import insightRoutes from './routes/insightRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 
-// ── CORS ──────────────────────────────────────────────────────────────────────
-const ALLOWED_ORIGINS = [
-    'http://localhost:5173',
-    'http://localhost:4173',
-    process.env.CLIENT_URL,
-].filter(Boolean);
-
 const app = express();
 
+// ── CORS ──────────────────────────────────────────────────────────────────────
 app.use(
     cors({
-        origin: true, // mirrors the request origin — safe with JWT Bearer token auth
+        origin: true, // mirrors request origin — safe with JWT Bearer token auth
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization'],
         credentials: true,
         optionsSuccessStatus: 204,
     })
 );
-
-// Handle OPTIONS preflight explicitly — must come before routes
+// Handle OPTIONS preflight before any route
 app.options('*', cors());
 app.use(express.json());
+
+// ── DB connection — lazy singleton for Vercel cold starts ─────────────────────
+let dbPromise = null;
+const ensureDB = () => {
+    if (!dbPromise) {
+        dbPromise = connectDB().catch((err) => {
+            // Reset so next request retries
+            dbPromise = null;
+            throw err;
+        });
+    }
+    return dbPromise;
+};
+
+// Initialize Gemini once
+initGemini();
+
+// ── DB middleware — waits for connection on every cold start ──────────────────
+app.use(async (req, res, next) => {
+    try {
+        await ensureDB();
+        next();
+    } catch (err) {
+        console.error('❌ DB connection failed:', err.message);
+        res.status(503).json({ message: 'Database unavailable, please retry' });
+    }
+});
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
@@ -63,20 +83,6 @@ app.use((err, req, res, next) => {
 // 404 handler
 app.use((req, res) => {
     res.status(404).json({ message: `Route ${req.originalUrl} not found` });
-});
-
-// ── DB + AI init ──────────────────────────────────────────────────────────────
-// Called at module load — works for both local (nodemon) and Vercel serverless.
-let initialized = false;
-const init = async () => {
-    if (!initialized) {
-        await connectDB();
-        initGemini();
-        initialized = true;
-    }
-};
-init().catch((err) => {
-    console.error('❌ Startup error:', err.message);
 });
 
 // ── Local dev server (Vercel ignores this) ────────────────────────────────────
