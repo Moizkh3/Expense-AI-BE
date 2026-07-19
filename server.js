@@ -22,15 +22,7 @@ const app = express();
 
 app.use(
     cors({
-        origin: (origin, callback) => {
-            // Allow server-to-server / Postman (no origin) or whitelisted origins
-            if (!origin || ALLOWED_ORIGINS.includes(origin)) {
-                callback(null, true);
-            } else {
-                // Return false (not an Error) to avoid 500 — CORS will send a proper rejection
-                callback(null, false);
-            }
-        },
+        origin: true, // mirrors the request origin — safe with JWT Bearer token auth
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization'],
         credentials: true,
